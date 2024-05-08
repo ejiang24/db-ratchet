@@ -141,6 +141,8 @@ std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::strin
 }
 
 
+// RatchetEncrypt, RatchetDecrypt
+
 
 
 

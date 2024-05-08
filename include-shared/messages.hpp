@@ -69,3 +69,8 @@ struct Message_Message : public Serializable {
   void serialize(std::vector<unsigned char> &data);
   int deserialize(std::vector<unsigned char> &data);
 };
+
+struct Header {
+  int temp;
+  SecByteBlock DH_public_val;
+};
