@@ -72,5 +72,5 @@ struct Message_Message : public Serializable {
 
 struct Header {
   int temp;
-  SecByteBlock DH_public_val;
+  CryptoPP::SecByteBlock DH_public_val;
 };

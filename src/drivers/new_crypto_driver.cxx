@@ -112,7 +112,7 @@ std::pair<std::string, std::string> NewCryptoDriver::encrypt(SecByteBlock mk, st
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
 
-  std::string ct = AES_encrypt(enc_key, pt, iv);
+  std::string ct = new_AES_encrypt(enc_key, pt, iv);
 
   // calculate HMAC
   std::string hmac = HMAC_generate(auth_key, ad + ct);
@@ -137,7 +137,7 @@ std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::strin
 
   bool verified = HMAC_verify(auth_key, ad + ct, "HMAC");
 
-
+  return "yuh";
 }
 
 
@@ -184,7 +184,7 @@ SecByteBlock NewCryptoDriver::AES_generate_key(const SecByteBlock &DH_shared_key
  * @return Pair of ciphertext and iv
  */
 std::string
-NewCryptoDriver::AES_encrypt(SecByteBlock key, std::string plaintext, SecByteBlock iv) {
+NewCryptoDriver::new_AES_encrypt(SecByteBlock key, std::string plaintext, SecByteBlock iv) {
   try {
     CBC_Mode<AES>::Encryption enc;
   
@@ -317,4 +317,29 @@ bool NewCryptoDriver::HMAC_verify(SecByteBlock key, std::string ciphertext,
   
 
 
+}
+
+
+std::pair<std::string, SecByteBlock>
+NewCryptoDriver::AES_encrypt(SecByteBlock key, std::string plaintext) {
+  try {
+
+    CBC_Mode<AES>::Encryption enc;
+    SecByteBlock iv(AES::BLOCKSIZE);
+
+    CryptoPP::AutoSeededRandomPool pool;
+    enc.GetNextIV(pool, iv);
+    enc.SetKeyWithIV(key, key.size(), iv);
+
+    std::string ciphertext;
+    CryptoPP::StringSource s(plaintext, true, new StreamTransformationFilter(enc, new StringSink(ciphertext)));
+
+    return {ciphertext, iv};
+
+  } catch (CryptoPP::Exception &e) {
+    std::cerr << e.what() << std::endl;
+    std::cerr << "This function was likely called with an incorrect shared key."
+              << std::endl;
+    throw std::runtime_error("CryptoDriver AES encryption failed.");
+  }
 }

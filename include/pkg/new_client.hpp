@@ -30,7 +30,7 @@ public:
   void run(std::string command);
   void HandleKeyExchange(std::string command);
 
-  void NewClient::DHRatchetStep(Header header);
+  void DHRatchetStep(Header header);
 
 private:
   void ReceiveThread();

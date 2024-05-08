@@ -34,7 +34,8 @@ public:
                          const SecByteBlock &DH_other_public_value);
 
   SecByteBlock AES_generate_key(const SecByteBlock &DH_shared_key);
-  std::string AES_encrypt(SecByteBlock key, std::string plaintext, SecByteBlock iv);
+  std::pair<std::string, SecByteBlock> AES_encrypt(SecByteBlock key,
+                                                   std::string plaintext);
   std::string AES_decrypt(SecByteBlock key, SecByteBlock iv,
                           std::string ciphertext);
 
@@ -46,6 +47,8 @@ public:
   std::pair<SecByteBlock, SecByteBlock> KDF_RK(SecByteBlock rk, SecByteBlock dh_out);
   std::pair<SecByteBlock, SecByteBlock> KDF_CK(SecByteBlock ck);
   std::pair<std::string, std::string> encrypt(SecByteBlock mk, std::string pt, std::string ad);
-  std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::string ad);
+  std::string decrypt(SecByteBlock mk, std::string ct, std::string ad);
+
+  std::string new_AES_encrypt(SecByteBlock key, std::string plaintext, SecByteBlock iv);
   
 };

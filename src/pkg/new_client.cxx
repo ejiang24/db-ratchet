@@ -66,6 +66,7 @@ Message_Message NewClient::send(std::string plaintext) {
     this->DH_switched = false;
   }
 
+  // TODO: FIX lol
   auto [ciphertext, iv] = this->crypto_driver->AES_encrypt(this->AES_key, plaintext);
   std::string to_tag = concat_msg_fields(iv, this->DH_current_public_value, ciphertext);
   std::string tag = this->crypto_driver->HMAC_generate(this->HMAC_key, to_tag);
@@ -136,11 +137,46 @@ void NewClient::run(std::string command) {
  */
 void NewClient::HandleKeyExchange(std::string command) {
 
+    // TODO: RatchetInit
   DHParams_Message params;
-  if (command == "listen") {
+  if (command == "listen") { // Alice
+    this->cli_driver->print_warning("aliceeeeeeeee");
+    // WAITS FOR BOB
     std::vector<unsigned char> vctr = this->network_driver->read();
     params.deserialize(vctr);
     this->DH_params = params;
+
+    //make Alice's keys
+    auto [dh_obj, prv_key, pub_key] = this->crypto_driver->DH_initialize(params);
+    // making DHs
+    this->DH_current_public_value = pub_key;
+    this->DH_current_private_value = prv_key;
+
+    // Alice sends her own public key? Bob can always store it for later lol (Does it matter?)
+    PublicValue_Message pub_msg;
+    pub_msg.public_value = this->DH_current_public_value;
+    std::vector<unsigned char> pub_to_send;
+    pub_msg.serialize(pub_to_send);
+    this->network_driver->send(pub_to_send);
+
+    // getting DHr (receiving DH value, the other public value)
+    std::vector<unsigned char> other_pub = this->network_driver->read();
+    PublicValue_Message other_pub_msg;
+    other_pub_msg.deserialize(other_pub);
+    this->DH_last_other_public_value = other_pub_msg.public_value;
+
+    CryptoPP::SecByteBlock secret_key = this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
+    // for ease, use shared secret as the original root key (which must be agreed upon)
+    auto[new_rk, new_cks] = this->crypto_driver->KDF_RK(secret_key, secret_key);
+
+    this->rk = new_rk;
+    this->ck_sending = new_cks;
+    // this->ck_receiving = SecByteBlock(NULL); // TODO: if this causes issues, fix it lol
+    this->msg_num_sending = 0;
+    this->msg_num_receiving = 0;
+    this->prev_chain_num = 0;
+    // this->mskipped = {};
+
   }
   else if (command == "connect") {
     params = this->crypto_driver->DH_generate_params();
@@ -148,30 +184,43 @@ void NewClient::HandleKeyExchange(std::string command) {
     std::vector<unsigned char> vctr;
     this->DH_params.serialize(vctr);
     this->network_driver->send(vctr);
+
+    //make Bob's keys
+    auto [dh_obj, prv_key, pub_key] = this->crypto_driver->DH_initialize(params);
+    // making DHs
+    this->DH_current_public_value = pub_key;
+    this->DH_current_private_value = prv_key;
+
+    // sends bob pub key
+    PublicValue_Message pub_msg;
+    pub_msg.public_value = this->DH_current_public_value;
+    std::vector<unsigned char> pub_to_send;
+    pub_msg.serialize(pub_to_send);
+    this->network_driver->send(pub_to_send);
+
+    // get alice pub key
+    std::vector<unsigned char> other_pub = this->network_driver->read();
+    PublicValue_Message other_pub_msg;
+    other_pub_msg.deserialize(other_pub);
+    this->DH_last_other_public_value = other_pub_msg.public_value;
+
+    CryptoPP::SecByteBlock secret_key = this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
+    // bob receives first 
+    // auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(secret_key, secret_key);
+    this->rk = secret_key;
+    // this->ck_sending = SecByteBlock(NULL);
+    // this->ck_receiving = SecByteBlock(NULL);
+    this->msg_num_sending = 0;
+    this->msg_num_receiving = 0;
+    this->prev_chain_num = 0;
+    // this->mskipped = {};
+    
+
   }
 
-  //make new keys
-  auto [dh_obj, prv_key, pub_key] = this->crypto_driver->DH_initialize(params);
-  this->DH_current_public_value = pub_key;
-  this->DH_current_private_value = prv_key;
-
-  PublicValue_Message pub_msg;
-  pub_msg.public_value = this->DH_current_public_value;
-  std::vector<unsigned char> pub_to_send;
-  pub_msg.serialize(pub_to_send);
-  this->network_driver->send(pub_to_send);
-
-  std::vector<unsigned char> other_pub = this->network_driver->read();
-  PublicValue_Message other_pub_msg;
-  other_pub_msg.deserialize(other_pub);
-  this->DH_last_other_public_value = other_pub_msg.public_value;
-  
-
-  this->prepare_keys(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
-
+  // TODO: deal with later?
   //set DH_switched
   this->DH_switched  = true;
-
 
 
 }
@@ -256,12 +305,5 @@ void NewClient::DHRatchetStep(Header header) {
 
     //generate_DH returns new Diffie Hellman key pair
     //dh returns the shared secret
-
-
-    
-
-
-
-
 
 }

@@ -138,6 +138,7 @@ void Client::HandleKeyExchange(std::string command) {
 
   DHParams_Message params;
   if (command == "listen") {
+    // this->cli_driver->print_warning("ad;lkfajsldkfj");
     std::vector<unsigned char> vctr = this->network_driver->read();
     params.deserialize(vctr);
     this->DH_params = params;
