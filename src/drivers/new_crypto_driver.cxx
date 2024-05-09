@@ -135,9 +135,13 @@ std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::strin
 
   std::string dec = AES_decrypt(mk, iv, ct);
 
-  bool verified = HMAC_verify(auth_key, ad + ct, "HMAC");
+  // bool verified = HMAC_verify(auth_key, ad + ct, "HMAC");
+  // if (verified){
+  //   return dec;
+  // }
 
-  return "yuh";
+  // 
+  return dec;
 }
 
 

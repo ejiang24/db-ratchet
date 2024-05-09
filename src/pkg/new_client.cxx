@@ -125,6 +125,20 @@ void NewClient::run(std::string command) {
   this->SendThread();
 }
 
+// Custom comparison function for CryptoPP::SecBlock<unsigned char>
+bool compareSecBlocks(const CryptoPP::SecByteBlock& lhs,
+                      const CryptoPP::SecByteBlock& rhs) {
+    // Compare the contents of the SecBlocks byte by byte
+    size_t minLength = std::min(lhs.size(), rhs.size());
+    for (size_t i = 0; i < minLength; ++i) {
+        if (lhs[i] < rhs[i]) return true;
+        if (lhs[i] > rhs[i]) return false;
+    }
+    return lhs.size() < rhs.size(); // If all bytes are equal, shorter block is considered smaller
+}
+
+
+
 /**
  * Run key exchange. This function:
  * 1) Listen for or generate and send DHParams_Message depending on `command`.
@@ -175,6 +189,9 @@ void NewClient::HandleKeyExchange(std::string command) {
     this->msg_num_sending = 0;
     this->msg_num_receiving = 0;
     this->prev_chain_num = 0;
+
+  
+
     // this->mskipped = {};
 
   }
@@ -213,7 +230,8 @@ void NewClient::HandleKeyExchange(std::string command) {
     this->msg_num_sending = 0;
     this->msg_num_receiving = 0;
     this->prev_chain_num = 0;
-    // this->mskipped = {};
+    // std::map<std::pair<SecByteBlock, Integer>, SecByteBlock> mskipped;
+    // this->mskipped = mskipped;
     
 
   }
@@ -299,12 +317,15 @@ void NewClient::DHRatchetStep(Header header) {
 
     DHParams_Message new_params = this->crypto_driver->DH_generate_params();
     auto[new_dh_obj, new_prv, new_pub] = this->crypto_driver->DH_initialize(new_params);
+    this->DH_params = new_params;
+    this->DH_current_public_value = new_pub;
+    this->DH_current_private_value = new_prv;
+    // TODO: make sure that all the instance variables are updated accordingly
     // probably need to update this in the state? 
 
     auto[new_new_rk, new_cks] = this->crypto_driver->KDF_RK(this->rk, this->crypto_driver->DH_generate_shared_key(new_dh_obj, new_prv, this->DH_last_other_public_value));
-
-    //generate_DH returns new Diffie Hellman key pair
-    //dh returns the shared secret
+    this->rk = new_new_rk;
+    this->ck_sending = new_cks;
 
 }
 
@@ -330,4 +351,54 @@ Header NewClient::create_header(SecByteBlock DHs, Integer PN, Integer Ns) {
   res.pn = PN;
   res.ns = Ns;
   return res;
+}
+
+std::string NewClient::ratchet_decrypt(Header header, std::string ct, std::string AD){
+  std::string plaintext = try_skipped_message_keys(header,ct,AD);
+  if (plaintext != ""){
+    return plaintext;
+  }
+  if (header.DH_public_val != this->DH_last_other_public_value){
+    skip_message_keys(header.pn);
+    DHRatchetStep(header);
+    // DHRatchet
+  }
+  skip_message_keys(header.ns);
+  auto[new_ckr, new_mk] = this->crypto_driver->KDF_CK(this->ck_receiving);
+  this->ck_receiving = new_ckr;
+  this->msg_num_receiving++; // check ++
+  return this->crypto_driver->decrypt(new_mk, ct, concat(AD, header));
+
+}
+
+std::string NewClient::try_skipped_message_keys(Header header, std::string ct, std::string AD){
+  CryptoPP::Integer key = byteblock_to_integer(header.DH_public_val + integer_to_byteblock(header.ns));
+  // std::pair<SecByteBlock, Integer> key = std::make_pair(header.DH_public_val,header.ns);
+  if (this->mskipped.find(key) == this->mskipped.end()){
+    return "";
+  }
+  else{
+    Integer mk = this->mskipped[key];
+    // auto found = this->mskipped.find(key);
+    this->mskipped.erase(key);
+    return this->crypto_driver->decrypt(integer_to_byteblock(mk), ct, concat(AD,header));
+  }
+}
+void NewClient::skip_message_keys(CryptoPP::Integer until){
+  CryptoPP::Integer MAX_SKIP = 4;
+  if (this->msg_num_receiving + MAX_SKIP < until){
+    throw std::runtime_error("Too many skipped messages!!! Stop trying to be evil!!!");
+  }
+  // TODO: unsure about this null check
+  if (this->ck_receiving != string_to_byteblock("")){
+    // Creating skip message keys and storing them
+    while (this->msg_num_receiving < until){
+      auto[new_ckr, new_mk] = this->crypto_driver->KDF_CK(this->ck_receiving);
+      this->ck_receiving = new_ckr;
+      Integer key = byteblock_to_integer(this->DH_last_other_public_value + integer_to_byteblock(this->msg_num_receiving));
+      // this->mskipped[{this->DH_last_other_public_value, this->msg_num_receiving}] = new_mk;
+      this->mskipped[key] = byteblock_to_integer(new_mk);
+      this->msg_num_receiving++;
+    }
+  }
 }

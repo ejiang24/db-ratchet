@@ -34,6 +34,9 @@ public:
   std::pair<Header, std::pair<std::string, std::string>> ratchet_encrypt(std::string pt, std::string AD);
   Header create_header(SecByteBlock DHs, Integer PN, Integer Ns);
   std::string concat(std::string ad, Header header);
+  std::string ratchet_decrypt(Header header, std::string ct, std::string AD);
+  std::string try_skipped_message_keys(Header header, std::string ct, std::string AD);
+  void skip_message_keys(CryptoPP::Integer until);
 
 private:
   void ReceiveThread();
@@ -61,6 +64,7 @@ private:
   Integer msg_num_sending;
   Integer msg_num_receiving;
   Integer prev_chain_num;
-  std::map<SecByteBlock, std::pair<Integer, Integer>> mskipped;
+  // std::map<std::pair<SecByteBlock, Integer>, SecByteBlock> mskipped;
+  std::map<CryptoPP::Integer, CryptoPP::Integer> mskipped;
 
 };
