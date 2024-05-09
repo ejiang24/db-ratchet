@@ -230,3 +230,4 @@ void Client::SendThread() {
     this->cli_driver->print_right(plaintext);
   }
 }
+

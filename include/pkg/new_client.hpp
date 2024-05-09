@@ -31,6 +31,9 @@ public:
   void HandleKeyExchange(std::string command);
 
   void DHRatchetStep(Header header);
+  std::pair<Header, std::pair<std::string, std::string>> ratchet_encrypt(std::string pt, std::string AD);
+  Header create_header(SecByteBlock DHs, Integer PN, Integer Ns);
+  std::string concat(std::string ad, Header header);
 
 private:
   void ReceiveThread();

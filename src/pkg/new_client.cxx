@@ -307,3 +307,27 @@ void NewClient::DHRatchetStep(Header header) {
     //dh returns the shared secret
 
 }
+
+std::pair<Header, std::pair<std::string, std::string>> NewClient::ratchet_encrypt(std::string pt, std::string AD) {
+  auto[new_cks, new_mk] = this->crypto_driver->KDF_CK(this->ck_sending);
+  this->ck_sending = new_cks;
+  Header header = create_header(this->DH_current_public_value, this->prev_chain_num, this->msg_num_sending);
+
+  this->msg_num_sending++; // i hope this works
+  return {header, this->crypto_driver->encrypt(new_mk, pt, concat(AD, header))};
+}
+
+std::string NewClient::concat(std::string ad, Header header) {
+  // TODO: hope this works lol
+  SecByteBlock concated = header.DH_public_val + integer_to_byteblock(header.pn) + integer_to_byteblock(header.ns);
+  return ad + byteblock_to_string(concated); 
+
+}
+
+Header NewClient::create_header(SecByteBlock DHs, Integer PN, Integer Ns) {
+  Header res;
+  res.DH_public_val = DHs;
+  res.pn = PN;
+  res.ns = Ns;
+  return res;
+}
