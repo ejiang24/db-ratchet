@@ -55,6 +55,7 @@ Message_Message Client::send(std::string plaintext) {
   // Grab the lock to avoid race conditions between the receive and send threads
   // Lock will automatically release at the end of the function.
   std::unique_lock<std::mutex> lck(this->mtx);// TODO: implement me!
+    
 
   //first message
   if (this->DH_switched = true) {

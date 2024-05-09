@@ -25,8 +25,8 @@ public:
   void prepare_keys(CryptoPP::DH DH_obj,
                     CryptoPP::SecByteBlock DH_private_value,
                     CryptoPP::SecByteBlock DH_other_public_value);
-  Message_Message send(std::string plaintext);
-  std::pair<std::string, bool> receive(Message_Message ciphertext);
+  DB_Ratchet_Message send(std::string plaintext);
+  std::pair<std::string, bool> receive(DB_Ratchet_Message ciphertext);
   void run(std::string command);
   void HandleKeyExchange(std::string command);
 

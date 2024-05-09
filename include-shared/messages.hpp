@@ -18,6 +18,8 @@ enum T {
   DHParams_Message = 0,
   PublicValue = 1,
   Message = 2,
+  DB_Ratchet = 3,
+  Header = 4
 };
 }
 MessageType::T get_message_type(std::vector<unsigned char> &data);
@@ -70,8 +72,23 @@ struct Message_Message : public Serializable {
   int deserialize(std::vector<unsigned char> &data);
 };
 
-struct Header {
+struct Header : public Serializable{
   CryptoPP::SecByteBlock DH_public_val;
   CryptoPP::Integer pn;
   CryptoPP::Integer ns;
+
+  void serialize(std::vector<unsigned char> &data);
+  int deserialize(std::vector<unsigned char> &data);
 };
+
+struct DB_Ratchet_Message : public Serializable {
+  Header header; // header has the public value
+  std::string mac;
+  std::string ciphertext;
+
+  void serialize(std::vector<unsigned char> &data);
+  int deserialize(std::vector<unsigned char> &data);
+};
+
+
+

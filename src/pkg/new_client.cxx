@@ -51,32 +51,44 @@ void NewClient::prepare_keys(CryptoPP::DH DH_obj,
  * 1) Check if the DH Ratchet keys need to change; if so, update them.
  * 2) Encrypt and tag the message.
  */
-Message_Message NewClient::send(std::string plaintext) {
+DB_Ratchet_Message NewClient::send(std::string plaintext) {
   // Grab the lock to avoid race conditions between the receive and send threads
   // Lock will automatically release at the end of the function.
   std::unique_lock<std::mutex> lck(this->mtx);// TODO: implement me!
 
-  //first message
-  if (this->DH_switched = true) {
-    auto [dh_obj, prv, pub] = this->crypto_driver->DH_initialize(this->DH_params);
-    this->DH_current_private_value = prv;
-    this->DH_current_public_value = pub;
-    this->prepare_keys(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
+  // apply symm key ratchet to sending chain key
+  // if new other ratchet pub was received, new sending key was made in ratchet step
+  auto[new_ck, new_mk] = this->crypto_driver->KDF_CK(this->ck_sending);
+  // store the new chain key
+  this->ck_sending = new_ck;
 
-    this->DH_switched = false;
-  }
+  // send the message
+  DB_Ratchet_Message res;
+  auto[header, ct_hmac] = ratchet_encrypt(plaintext, "");
+  res.header = header;
+  res.ciphertext = ct_hmac.first;
+  res.mac = ct_hmac.second;
 
-  // TODO: FIX lol
-  auto [ciphertext, iv] = this->crypto_driver->AES_encrypt(this->AES_key, plaintext);
-  std::string to_tag = concat_msg_fields(iv, this->DH_current_public_value, ciphertext);
-  std::string tag = this->crypto_driver->HMAC_generate(this->HMAC_key, to_tag);
-
-  Message_Message res;
-  res.iv = iv;
-  res.public_value = this->DH_current_public_value;
-  res.ciphertext = ciphertext;
-  res.mac = tag;
   return res;
+
+  // if we're doing the thing, we need to do if switched, then ge
+
+
+
+  // //first message
+  
+
+  // // TODO: FIX lol
+  // auto [ciphertext, iv] = this->crypto_driver->AES_encrypt(this->AES_key, plaintext);
+  // std::string to_tag = concat_msg_fields(iv, this->DH_current_public_value, ciphertext);
+  // std::string tag = this->crypto_driver->HMAC_generate(this->HMAC_key, to_tag);
+
+  // Message_Message res;
+  // res.iv = iv;
+  // res.public_value = this->DH_current_public_value;
+  // res.ciphertext = ciphertext;
+  // res.mac = tag;
+  // return res;
 }
 
 /**
@@ -85,25 +97,43 @@ Message_Message NewClient::send(std::string plaintext) {
  * 1) Check if the DH Ratchet keys need to change; if so, update them.
  * 2) Decrypt and verify the message.
  */
-std::pair<std::string, bool> NewClient::receive(Message_Message msg) {
+std::pair<std::string, bool> NewClient::receive(DB_Ratchet_Message msg) {
   // Grab the lock to avoid race conditions between the receive and send threads
   // Lock will automatically release at the end of the function.
   std::unique_lock<std::mutex> lck(this->mtx);
 
-  //if pub values are diff ==> if new one has been sent
-  if (msg.public_value != this->DH_last_other_public_value) {
-    auto [dh_obj, prv, pub] = this->crypto_driver->DH_initialize(this->DH_params);
-    this->DH_last_other_public_value = msg.public_value;
-    this->prepare_keys(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
+  std::string dec = ratchet_decrypt(msg.header, msg.ciphertext, "");
+
+  // verify the message
+  // make sure it's updated somewhere
+  // want to verify header + ciphertext
+  // concat ("", msg) basically just makes header a string
+  // the whole thing that was tagged was Root AD ("") + header + ciphertext
+  bool is_valid = this->crypto_driver->HMAC_verify(this->HMAC_key, concat("", msg.header) + msg.ciphertext, msg.mac);
+
+
+  return {dec, is_valid};
+ 
+
+
+
+  // if (msg.header.DH_public_val != this->DH_last_other_public_value) {
+  //   auto [dh_obj, prv, pub] = this->crypto_driver->DH_initialize(this->DH_params);
+  //   this->DH_last_other_public_value = msg.public_value;
+  //   this->prepare_keys(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
     
-    this->DH_switched = true;
-  }
+  //   this->DH_switched = true;
+  // }
 
-  std::string to_decrypt = concat_msg_fields(msg.iv, msg.public_value, msg.ciphertext);
-  std::string decrypted = this->crypto_driver->AES_decrypt(this->AES_key, msg.iv, msg.ciphertext); //key, iv, ciphertext 
-  bool is_valid = this->crypto_driver->HMAC_verify(this->HMAC_key, to_decrypt, msg.mac);
+  // std::string to_decrypt = concat_msg_fields(msg.iv, msg.public_value, msg.ciphertext);
+  // std::string decrypted = this->crypto_driver->AES_decrypt(this->AES_key, msg.iv, msg.ciphertext); //key, iv, ciphertext 
+  // bool is_valid = this->crypto_driver->HMAC_verify(this->HMAC_key, to_decrypt, msg.mac);
 
-  return {decrypted, is_valid};
+  // // TODO: make sure hmac_key is updated with new auth_keys
+
+  // return {decrypted, is_valid};
+
+  // when we receive, we should check fi ti's a skipped key was stored earlier
 }
 
 /**
@@ -154,7 +184,6 @@ void NewClient::HandleKeyExchange(std::string command) {
     // TODO: RatchetInit
   DHParams_Message params;
   if (command == "listen") { // Alice
-    this->cli_driver->print_warning("aliceeeeeeeee");
     // WAITS FOR BOB
     std::vector<unsigned char> vctr = this->network_driver->read();
     params.deserialize(vctr);
@@ -260,7 +289,7 @@ void NewClient::ReceiveThread() {
     }
 
     // Deserialize, decrypt, and verify message.
-    Message_Message msg;
+    DB_Ratchet_Message msg;
     msg.deserialize(data);
     auto decrypted_data = this->receive(msg);
     if (!decrypted_data.second) {
@@ -288,7 +317,7 @@ void NewClient::SendThread() {
 
     // Encrypt and send message.
     if (plaintext != "") {
-      Message_Message msg = this->send(plaintext);
+      DB_Ratchet_Message msg = this->send(plaintext);
       std::vector<unsigned char> data;
       msg.serialize(data);
       this->network_driver->send(data);
@@ -311,19 +340,18 @@ void NewClient::DHRatchetStep(Header header) {
 
     // redundant? but need the dh_obj, these ideally are old keys and should be same dh_obj
     auto[dh_obj, prv, pub] = this->crypto_driver->DH_initialize(this->DH_params);
+    // our current private value has not yet been updated
     auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(this->rk, this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value));
     this->rk = new_rk;
-    this->ck_receiving = new_ckr;
+    this->ck_receiving = new_ckr; // used to decrypt the incoming message from Bob (with new public ratchet)
 
-    DHParams_Message new_params = this->crypto_driver->DH_generate_params();
-    auto[new_dh_obj, new_prv, new_pub] = this->crypto_driver->DH_initialize(new_params);
-    this->DH_params = new_params;
-    this->DH_current_public_value = new_pub;
-    this->DH_current_private_value = new_prv;
+    // already newly generated above
+    this->DH_current_public_value = pub;
+    this->DH_current_private_value = prv;
     // TODO: make sure that all the instance variables are updated accordingly
     // probably need to update this in the state? 
 
-    auto[new_new_rk, new_cks] = this->crypto_driver->KDF_RK(this->rk, this->crypto_driver->DH_generate_shared_key(new_dh_obj, new_prv, this->DH_last_other_public_value));
+    auto[new_new_rk, new_cks] = this->crypto_driver->KDF_RK(this->rk, this->crypto_driver->DH_generate_shared_key(dh_obj, prv, this->DH_last_other_public_value));
     this->rk = new_new_rk;
     this->ck_sending = new_cks;
 
@@ -362,6 +390,8 @@ std::string NewClient::ratchet_decrypt(Header header, std::string ct, std::strin
     skip_message_keys(header.pn);
     DHRatchetStep(header);
     // DHRatchet
+
+    // TODO: this->DH_Switched?
   }
   skip_message_keys(header.ns);
   auto[new_ckr, new_mk] = this->crypto_driver->KDF_CK(this->ck_receiving);

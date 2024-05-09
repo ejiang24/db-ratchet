@@ -99,6 +99,7 @@ NewCryptoDriver::KDF_CK(SecByteBlock ck) {
     
 }
 
+// todo: should we just move this to client so we can set this->HMAC_key
 std::pair<std::string, std::string> NewCryptoDriver::encrypt(SecByteBlock mk, std::string pt, std::string ad) {
   CryptoPP::SecByteBlock full_key(80); 
 

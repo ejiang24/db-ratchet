@@ -159,3 +159,78 @@ int Message_Message::deserialize(std::vector<unsigned char> &data) {
   n += get_string(&this->mac, data, n);
   return n;
 }
+
+
+
+// CryptoPP::SecByteBlock DH_public_val;
+//   CryptoPP::Integer pn;
+//   CryptoPP::Integer ns;
+/**
+ * Serialize Header.
+ */
+void Header::serialize(std::vector<unsigned char> &data) {
+  // Add message type.
+  data.push_back((char)MessageType::Header);
+
+  // Add fields.
+  std::string dh_public_val = byteblock_to_string(this->DH_public_val);
+  put_string(dh_public_val, data);
+
+  put_integer(this->pn, data);
+  put_integer(this->ns, data);
+}
+
+/**
+ * Deserialize Header.
+ */
+int Header::deserialize(std::vector<unsigned char> &data) {
+  // Check correct message type.
+  assert(get_message_type(data) == MessageType::Header);
+
+  // Get fields.
+  int n = 1;
+  std::string DH_public_val;
+  n += get_string(&DH_public_val, data, n);
+  this->DH_public_val = string_to_byteblock(DH_public_val);
+  n += get_integer(&this->pn, data, n);
+  n += get_integer(&this->ns, data, n);
+  return n;
+}
+
+/**
+ * Serialize Message.
+ */
+void DB_Ratchet_Message::serialize(std::vector<unsigned char> &data) {
+  // Add message type.
+  data.push_back((char)MessageType::DB_Ratchet);
+
+
+  // Add fields.
+
+  std::vector<unsigned char> header_data;
+  this->header.serialize(header_data);
+  data.insert(data.end(), header_data.begin(), header_data.end());
+
+
+  put_string(this->mac, data);
+  put_string(this->ciphertext, data);
+}
+
+/**
+ * Deserialize DB_Ratchet_Message.
+ */
+int DB_Ratchet_Message::deserialize(std::vector<unsigned char> &data) {
+  // Check correct message type.
+  assert(get_message_type(data) == MessageType::Message);
+
+  // Get fields.
+  int n = 1;
+  std::vector<unsigned char> header_slice = std::vector<unsigned char>(data.begin() + n, data.end());
+  n += this->header.deserialize(header_slice);
+
+  n += get_string(&this->mac, data, n);
+  n += get_string(&this->ciphertext, data, n);
+
+  return n;
+}
+
