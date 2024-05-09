@@ -185,6 +185,7 @@ void NewClient::HandleKeyExchange(std::string command) {
   DHParams_Message params;
   if (command == "listen") { // Alice
     // WAITS FOR BOB
+    this->cli_driver->print_warning("Alice is waiting for Bob's message");
     std::vector<unsigned char> vctr = this->network_driver->read();
     params.deserialize(vctr);
     this->DH_params = params;
@@ -194,6 +195,9 @@ void NewClient::HandleKeyExchange(std::string command) {
     // making DHs
     this->DH_current_public_value = pub_key;
     this->DH_current_private_value = prv_key;
+    this->cli_driver->print_warning("ALICE KEYS:");
+    this->cli_driver->print_warning("Alice public: " + byteblock_to_string(pub_key));
+    this->cli_driver->print_warning("Alice private: " + byteblock_to_string(prv_key));
 
     // Alice sends her own public key? Bob can always store it for later lol (Does it matter?)
     PublicValue_Message pub_msg;
