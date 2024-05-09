@@ -56,26 +56,20 @@ DB_Ratchet_Message NewClient::send(std::string plaintext) {
   // Lock will automatically release at the end of the function.
   std::unique_lock<std::mutex> lck(this->mtx);// TODO: implement me!
 
-  // apply symm key ratchet to sending chain key
-  // if new other ratchet pub was received, new sending key was made in ratchet step
-  // this->cli_driver->print_warning("applying a symmetric key ratchet step");
-  // auto[new_ck, new_mk] = this->crypto_driver->KDF_CK(this->ck_sending);
-  // this->cli_driver->print_warning("new sending key (to be used)");
-  // print_key_as_int(new_ck);
-  // this->cli_driver->print_warning("the following should be mk");
-  // print_key_as_int(new_mk);
-  // this->cli_driver->print_warning("yuhhhh");
-  // // store the new chain key
-  // this->ck_sending = new_ck;
+  // if i have already sent 2 messages, time for DH Ratchet step (arbitrary)
+  // if(this->msg_num_sending == 1) {
+  //   this->cli_driver->print_warning("time for a DH ratchet step!!!!!");
+
+  //   auto [dh_obj, prv_key, pub_key] = this->crypto_driver->DH_initialize(this->DH_params);
+  //   this->DH_current_private_value = prv_key;
+  //   this->DH_current_public_value = pub_key;
+  // }
 
   // send the message
   DB_Ratchet_Message res;
   auto[header, ct_hmac] = ratchet_encrypt(plaintext, "");
   res.header = header;
   res.ciphertext = ct_hmac.first;
-  this->cli_driver->print_warning("length of ciphertext inside the header to be sent: ");
-  printf("%d\n", res.ciphertext.length());
-  this->cli_driver->print_warning("yuh");
   res.mac = ct_hmac.second;
 
   return res;
@@ -281,13 +275,26 @@ void NewClient::HandleKeyExchange(std::string command) {
     this->cli_driver->print_warning("Bob generated a shared secret: ");
     print_key_as_int(secret_key);
 
-    // for ease, use shared secret as the original root key (which must be agreed upon)
+    // ADDED IN
     auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(secret_key, secret_key);
     this->cli_driver->print_warning("Bob generated a receiving chain key: ");
     print_key_as_int(new_ckr);
-    
-    this->rk = secret_key;
+
+    // this->rk = secret_key;
+    this->rk = new_rk;
     this->ck_receiving = new_ckr;
+
+    // bob makes a new public value, and creates a sending key from this?
+    auto [new_dh_obj, new_prv_key, new_pub_key] = this->crypto_driver->DH_initialize(params);
+    this->DH_current_public_value = new_pub_key;
+    this->DH_current_private_value = new_prv_key;
+    // make new secret key
+    CryptoPP::SecByteBlock new_secret_key = this->crypto_driver->DH_generate_shared_key(new_dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
+
+    auto[newer_rk, new_cks] = this->crypto_driver->KDF_RK(this->rk, new_secret_key);
+    this->rk = newer_rk;
+    this->ck_sending = new_cks;
+  
     this->msg_num_sending = 0;
     this->msg_num_receiving = 0;
     this->prev_chain_num = 0;
@@ -296,7 +303,7 @@ void NewClient::HandleKeyExchange(std::string command) {
 
   // TODO: deal with later?
   //set DH_switched
-  this->DH_switched  = true;
+  // this->DH_switched  = true;
 
 
 }
@@ -371,6 +378,10 @@ void NewClient::DHRatchetStep(Header header) {
     auto[dh_obj, prv, pub] = this->crypto_driver->DH_initialize(this->DH_params);
     // our current private value has not yet been updated
     auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(this->rk, this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value));
+    
+    // our shared secret was correct
+
+
     this->rk = new_rk;
     this->ck_receiving = new_ckr; // used to decrypt the incoming message from Bob (with new public ratchet)
     this->cli_driver->print_warning("made a new receiving chain key:");
@@ -429,11 +440,13 @@ std::string NewClient::ratchet_decrypt(Header header, std::string ct, std::strin
   print_key_as_int(header.DH_public_val);
   if (header.DH_public_val != this->DH_last_other_public_value){
     this->cli_driver->print_warning("just received a new public key, need to DHRatchet");
+    this->cli_driver->print_warning("AHAHAHAHAHAHAHAH");
     skip_message_keys(header.pn);
     DHRatchetStep(header);
     // DHRatchet
 
     // TODO: this->DH_Switched?
+    // this->DH_switched = true;
   }
   skip_message_keys(header.ns);
   auto[new_ckr, new_mk] = this->crypto_driver->KDF_CK(this->ck_receiving);
