@@ -58,15 +58,24 @@ DB_Ratchet_Message NewClient::send(std::string plaintext) {
 
   // apply symm key ratchet to sending chain key
   // if new other ratchet pub was received, new sending key was made in ratchet step
-  auto[new_ck, new_mk] = this->crypto_driver->KDF_CK(this->ck_sending);
-  // store the new chain key
-  this->ck_sending = new_ck;
+  // this->cli_driver->print_warning("applying a symmetric key ratchet step");
+  // auto[new_ck, new_mk] = this->crypto_driver->KDF_CK(this->ck_sending);
+  // this->cli_driver->print_warning("new sending key (to be used)");
+  // print_key_as_int(new_ck);
+  // this->cli_driver->print_warning("the following should be mk");
+  // print_key_as_int(new_mk);
+  // this->cli_driver->print_warning("yuhhhh");
+  // // store the new chain key
+  // this->ck_sending = new_ck;
 
   // send the message
   DB_Ratchet_Message res;
   auto[header, ct_hmac] = ratchet_encrypt(plaintext, "");
   res.header = header;
   res.ciphertext = ct_hmac.first;
+  this->cli_driver->print_warning("length of ciphertext inside the header to be sent: ");
+  printf("%d\n", res.ciphertext.length());
+  this->cli_driver->print_warning("yuh");
   res.mac = ct_hmac.second;
 
   return res;
@@ -104,11 +113,11 @@ std::pair<std::string, bool> NewClient::receive(DB_Ratchet_Message msg) {
 
   std::string dec = ratchet_decrypt(msg.header, msg.ciphertext, "");
 
-  // verify the message
-  // make sure it's updated somewhere
-  // want to verify header + ciphertext
-  // concat ("", msg) basically just makes header a string
-  // the whole thing that was tagged was Root AD ("") + header + ciphertext
+  this->cli_driver->print_warning("about to decrypt!");
+  this->cli_driver->print_warning("auth key");
+  print_key_as_int(this->HMAC_key);
+  this->cli_driver->print_warning("mac!");
+  this->cli_driver->print_warning(msg.mac);
   bool is_valid = this->crypto_driver->HMAC_verify(this->HMAC_key, concat("", msg.header) + msg.ciphertext, msg.mac);
 
 
@@ -196,8 +205,10 @@ void NewClient::HandleKeyExchange(std::string command) {
     this->DH_current_public_value = pub_key;
     this->DH_current_private_value = prv_key;
     this->cli_driver->print_warning("ALICE KEYS:");
-    this->cli_driver->print_warning("Alice public: " + byteblock_to_string(pub_key));
-    this->cli_driver->print_warning("Alice private: " + byteblock_to_string(prv_key));
+    this->cli_driver->print_warning("Alice public: ");
+    print_key_as_int(pub_key);
+    this->cli_driver->print_warning("Alice private: ");
+    print_key_as_int(prv_key);
 
     // Alice sends her own public key? Bob can always store it for later lol (Does it matter?)
     PublicValue_Message pub_msg;
@@ -211,10 +222,17 @@ void NewClient::HandleKeyExchange(std::string command) {
     PublicValue_Message other_pub_msg;
     other_pub_msg.deserialize(other_pub);
     this->DH_last_other_public_value = other_pub_msg.public_value;
+    this->cli_driver->print_warning("Alice received Bob's public key: ");
+    print_key_as_int(this->DH_last_other_public_value);
 
     CryptoPP::SecByteBlock secret_key = this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
+    this->cli_driver->print_warning("Alice generated a shared secret: ");
+    print_key_as_int(secret_key);
+
     // for ease, use shared secret as the original root key (which must be agreed upon)
     auto[new_rk, new_cks] = this->crypto_driver->KDF_RK(secret_key, secret_key);
+    this->cli_driver->print_warning("Alice generated a sending chain key: ");
+    print_key_as_int(new_cks);
 
     this->rk = new_rk;
     this->ck_sending = new_cks;
@@ -240,6 +258,11 @@ void NewClient::HandleKeyExchange(std::string command) {
     // making DHs
     this->DH_current_public_value = pub_key;
     this->DH_current_private_value = prv_key;
+    this->cli_driver->print_warning("BOB KEYS:");
+    this->cli_driver->print_warning("Bob public: ");
+    print_key_as_int(pub_key);
+    this->cli_driver->print_warning("Bob private: ");
+    print_key_as_int(prv_key);
 
     // sends bob pub key
     PublicValue_Message pub_msg;
@@ -255,17 +278,19 @@ void NewClient::HandleKeyExchange(std::string command) {
     this->DH_last_other_public_value = other_pub_msg.public_value;
 
     CryptoPP::SecByteBlock secret_key = this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value);
-    // bob receives first 
-    // auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(secret_key, secret_key);
+    this->cli_driver->print_warning("Bob generated a shared secret: ");
+    print_key_as_int(secret_key);
+
+    // for ease, use shared secret as the original root key (which must be agreed upon)
+    auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(secret_key, secret_key);
+    this->cli_driver->print_warning("Bob generated a receiving chain key: ");
+    print_key_as_int(new_ckr);
+    
     this->rk = secret_key;
-    // this->ck_sending = SecByteBlock(NULL);
-    // this->ck_receiving = SecByteBlock(NULL);
+    this->ck_receiving = new_ckr;
     this->msg_num_sending = 0;
     this->msg_num_receiving = 0;
     this->prev_chain_num = 0;
-    // std::map<std::pair<SecByteBlock, Integer>, SecByteBlock> mskipped;
-    // this->mskipped = mskipped;
-    
 
   }
 
@@ -348,6 +373,8 @@ void NewClient::DHRatchetStep(Header header) {
     auto[new_rk, new_ckr] = this->crypto_driver->KDF_RK(this->rk, this->crypto_driver->DH_generate_shared_key(dh_obj, this->DH_current_private_value, this->DH_last_other_public_value));
     this->rk = new_rk;
     this->ck_receiving = new_ckr; // used to decrypt the incoming message from Bob (with new public ratchet)
+    this->cli_driver->print_warning("made a new receiving chain key:");
+    print_key_as_int(new_ckr);
 
     // already newly generated above
     this->DH_current_public_value = pub;
@@ -362,11 +389,17 @@ void NewClient::DHRatchetStep(Header header) {
 }
 
 std::pair<Header, std::pair<std::string, std::string>> NewClient::ratchet_encrypt(std::string pt, std::string AD) {
+  this->cli_driver->print_warning("commencing symmetric key ratchet step, feeding this cks in:");
+  print_key_as_int(this->ck_sending);
   auto[new_cks, new_mk] = this->crypto_driver->KDF_CK(this->ck_sending);
   this->ck_sending = new_cks;
+  this->cli_driver->print_warning("message key");
+  print_key_as_int(new_mk);
+  this->cli_driver->print_warning("yuh");
   Header header = create_header(this->DH_current_public_value, this->prev_chain_num, this->msg_num_sending);
 
   this->msg_num_sending++; // i hope this works
+  this->cli_driver->print_warning("about to call encrypt");
   return {header, this->crypto_driver->encrypt(new_mk, pt, concat(AD, header))};
 }
 
@@ -390,7 +423,12 @@ std::string NewClient::ratchet_decrypt(Header header, std::string ct, std::strin
   if (plaintext != ""){
     return plaintext;
   }
+  this->cli_driver->print_warning("alice's public value:");
+  print_key_as_int(this->DH_last_other_public_value);
+  this->cli_driver->print_warning("the public key bob just got:");
+  print_key_as_int(header.DH_public_val);
   if (header.DH_public_val != this->DH_last_other_public_value){
+    this->cli_driver->print_warning("just received a new public key, need to DHRatchet");
     skip_message_keys(header.pn);
     DHRatchetStep(header);
     // DHRatchet
@@ -399,9 +437,16 @@ std::string NewClient::ratchet_decrypt(Header header, std::string ct, std::strin
   }
   skip_message_keys(header.ns);
   auto[new_ckr, new_mk] = this->crypto_driver->KDF_CK(this->ck_receiving);
+  this->cli_driver->print_warning("About to decrypt a message with this key:");
+  print_key_as_int(new_mk);
   this->ck_receiving = new_ckr;
   this->msg_num_receiving++; // check ++
-  return this->crypto_driver->decrypt(new_mk, ct, concat(AD, header));
+  auto[dec, hmac] = this->crypto_driver->decrypt(new_mk, ct, concat(AD, header));
+  this->HMAC_key = hmac;
+  this->cli_driver->print_warning("this->HMAC key has been set!");
+  print_key_as_int(this->HMAC_key);
+  printf("yuh\n");
+  return dec;
 
 }
 
@@ -415,7 +460,9 @@ std::string NewClient::try_skipped_message_keys(Header header, std::string ct, s
     Integer mk = this->mskipped[key];
     // auto found = this->mskipped.find(key);
     this->mskipped.erase(key);
-    return this->crypto_driver->decrypt(integer_to_byteblock(mk), ct, concat(AD,header));
+    auto[dec, hmac] = this->crypto_driver->decrypt(integer_to_byteblock(mk), ct, concat(AD,header));
+    this->HMAC_key = hmac;
+    return dec;
   }
 }
 void NewClient::skip_message_keys(CryptoPP::Integer until){

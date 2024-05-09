@@ -47,7 +47,7 @@ public:
   std::pair<SecByteBlock, SecByteBlock> KDF_RK(SecByteBlock rk, SecByteBlock dh_out);
   std::pair<SecByteBlock, SecByteBlock> KDF_CK(SecByteBlock ck);
   std::pair<std::string, std::string> encrypt(SecByteBlock mk, std::string pt, std::string ad);
-  std::string decrypt(SecByteBlock mk, std::string ct, std::string ad);
+  std::pair<std::string, SecByteBlock> decrypt(SecByteBlock mk, std::string ct, std::string ad);
 
   std::string new_AES_encrypt(SecByteBlock key, std::string plaintext, SecByteBlock iv);
   

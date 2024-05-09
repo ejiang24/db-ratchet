@@ -114,15 +114,26 @@ std::pair<std::string, std::string> NewCryptoDriver::encrypt(SecByteBlock mk, st
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
 
+  printf("encryption key!\n");
+  print_key_as_int(enc_key);
+  printf("iv!");
+  print_key_as_int(iv);
+
   std::string ct = new_AES_encrypt(enc_key, pt, iv);
 
   // calculate HMAC
   std::string hmac = HMAC_generate(auth_key, ad + ct);
+  printf("auth key!\n");
+  print_key_as_int(auth_key);
+  printf("hmac!\n");
+  printf("%s\n", hmac);
+  printf("yuh\n");
+  
 
   return {ct, hmac};
 }
 
-std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::string ad) {
+std::pair<std::string, CryptoPP::SecByteBlock> NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::string ad) {
   CryptoPP::SecByteBlock full_key(80); 
 
   HKDF<SHA256> hkdf;
@@ -135,7 +146,13 @@ std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::strin
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
 
-  std::string dec = AES_decrypt(mk, iv, ct);
+  printf("decryption key!\n");
+  print_key_as_int(enc_key);
+  printf("iv!\n");
+  print_key_as_int(iv);
+  // printf("%d\n")
+
+  std::string dec = AES_decrypt(enc_key, iv, ct);
 
   // bool verified = HMAC_verify(auth_key, ad + ct, "HMAC");
   // if (verified){
@@ -143,7 +160,7 @@ std::string NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::strin
   // }
 
   // 
-  return dec;
+  return {dec, auth_key};
 }
 
 
@@ -197,12 +214,15 @@ NewCryptoDriver::new_AES_encrypt(SecByteBlock key, std::string plaintext, SecByt
     CBC_Mode<AES>::Encryption enc;
   
     CryptoPP::AutoSeededRandomPool pool;
-    enc.GetNextIV(pool, iv);
+    // enc.GetNextIV(pool, iv);
     enc.SetKeyWithIV(key, key.size(), iv);
 
     std::string ciphertext;
     CryptoPP::StringSource s(plaintext, true, new StreamTransformationFilter(enc, new StringSink(ciphertext)));
 
+    printf("ciphertext length! \n");
+    printf("%d\n", ciphertext.length());
+    printf("yuh\n");
     return ciphertext;
 
   } catch (CryptoPP::Exception &e) {
