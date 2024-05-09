@@ -72,6 +72,6 @@ struct Message_Message : public Serializable {
 
 struct Header {
   CryptoPP::SecByteBlock DH_public_val;
-  Integer pn;
-  Integer ns;
+  CryptoPP::Integer pn;
+  CryptoPP::Integer ns;
 };
