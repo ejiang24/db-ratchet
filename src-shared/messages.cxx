@@ -221,7 +221,7 @@ void DB_Ratchet_Message::serialize(std::vector<unsigned char> &data) {
  */
 int DB_Ratchet_Message::deserialize(std::vector<unsigned char> &data) {
   // Check correct message type.
-  assert(get_message_type(data) == MessageType::Message);
+  assert(get_message_type(data) == MessageType::DB_Ratchet);
 
   // Get fields.
   int n = 1;

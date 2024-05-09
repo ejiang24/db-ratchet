@@ -2,6 +2,7 @@
 
 #include "../../include-shared/util.hpp"
 #include "../../include/drivers/new_crypto_driver.hpp"
+#include "../../include/drivers/cli_driver.hpp"
 
 using namespace CryptoPP;
 
@@ -235,6 +236,7 @@ std::string NewCryptoDriver::AES_decrypt(SecByteBlock key, SecByteBlock iv,
     dec.SetKeyWithIV(key, key.size(), iv);
 
     std::string decrypted;
+
     StringSource s(ciphertext, true, new StreamTransformationFilter(dec, new StringSink(decrypted)));
 
     return decrypted;
