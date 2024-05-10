@@ -240,15 +240,10 @@ NewCryptoDriver::new_AES_encrypt(SecByteBlock key, std::string plaintext, SecByt
     CBC_Mode<AES>::Encryption enc;
   
     CryptoPP::AutoSeededRandomPool pool;
-    // enc.GetNextIV(pool, iv);
     enc.SetKeyWithIV(key, key.size(), iv);
 
     std::string ciphertext;
     CryptoPP::StringSource s(plaintext, true, new StreamTransformationFilter(enc, new StringSink(ciphertext)));
-
-    printf("ciphertext length! \n");
-    // printf("%d\n", ciphertext.length());
-    printf("yuh\n");
     return ciphertext;
 
   } catch (CryptoPP::Exception &e) {
