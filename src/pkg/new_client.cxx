@@ -429,7 +429,7 @@ void NewClient::SendThread() {
     // Encrypt and send message.
     if (plaintext != "") {
       // if the first character is a "d", delay
-      if (plaintext[0] == 'd') {
+      if (plaintext[0] == 'd' || plaintext[0]== 'D') {
         // store the DB_Ratchet_Message for later
         out_of_order = this->send(plaintext);
        
