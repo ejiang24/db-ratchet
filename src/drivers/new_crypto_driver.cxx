@@ -74,16 +74,25 @@ SecByteBlock NewCryptoDriver::DH_generate_shared_key(
   return agreed;
 }
 
+/**
+ * @brief Generates a new 32 byte Root Key and 32 byte Chain Key pair from the previous Root Key
+ * and a shared secret.
+ * @param rk Root Key
+ * @param dh_out Diffie-Hellman shared secret
+ * @return Pair of Root Key and Chain Key
+ */
 std::pair<SecByteBlock, SecByteBlock>
 NewCryptoDriver::KDF_RK(SecByteBlock rk, SecByteBlock dh_out) {
-  printf("I'm in KDF_RK! rk and then dh_out");
-  print_key_as_int(rk);
-  print_key_as_int(dh_out);
+  // printf("I'm in KDF_RK! rk and then dh_out");
+  // print_key_as_int(rk);
+  // print_key_as_int(dh_out);
   CryptoPP::SecByteBlock key(64); // 64 bytes
 
+  // Uses HKDF to derive a 64 byte key
   HKDF<SHA256> hkdf;
   hkdf.DeriveKey(key, key.size(), dh_out, dh_out.size(), rk, rk.size(), NULL, 0);
 
+  // Splits the 64 byte key into a 32 byte Root Key and 32 byte Chain Key
   CryptoPP::SecByteBlock root_key(32);
   CryptoPP::SecByteBlock chain_key(32);
   root_key.Assign(key, 32);
@@ -92,10 +101,17 @@ NewCryptoDriver::KDF_RK(SecByteBlock rk, SecByteBlock dh_out) {
   return {root_key, chain_key};
 }
 
+/**
+ * @brief Generates a new 32 byte Message Key and 32 byte Chain Key pair 
+ * from the previous Chain Key
+ * @param ck Chain Key
+ * @return Pair of Message Key and Chain Key
+ */
 std::pair<SecByteBlock, SecByteBlock>
 NewCryptoDriver::KDF_CK(SecByteBlock ck) {
-  // CryptoPP::SecByteBlock key = HMAC_generate_key(ck);
 
+  // Arbitrarily uses 1 and 2 as ciphertexts
+  // Does not matter for our purposes, as long as they are different!
   std::string msg_key = HMAC_generate(ck, "1");
   std::string chain_key = HMAC_generate(ck, "2");
 
@@ -103,13 +119,24 @@ NewCryptoDriver::KDF_CK(SecByteBlock ck) {
     
 }
 
-// todo: should we just move this to client so we can set this->HMAC_key
+/**
+ * @brief Encrypts a plaintext message using the provided Message Key. 
+ * Per Perrin and Marlinspike's algorithm, also takes in associated data that 
+ * could be prepended to the header, but from discussion with our mentor, we decided
+ * that this was not extremely useful to include.
+ * @param mk Message Key
+ * @param pt Plaintext message
+ * @param ad Associated Data
+ * @return Pair of ciphertext and HMAC
+ */
 std::pair<std::string, std::string> NewCryptoDriver::encrypt(SecByteBlock mk, std::string pt, std::string ad) {
   CryptoPP::SecByteBlock full_key(80); 
 
+  // Uses HKDF to derive a 80 byte key
   HKDF<SHA256> hkdf;
   hkdf.DeriveKey(full_key, full_key.size(), mk, mk.size(), NULL, 0, NULL, 0);
 
+  // Splits the 80 byte key into a 32 byte Encryption Key and 32 byte Authentication Key and a 16 byte IV
   CryptoPP::SecByteBlock enc_key(32);
   CryptoPP::SecByteBlock auth_key(32);
   CryptoPP::SecByteBlock iv(16);
@@ -117,31 +144,42 @@ std::pair<std::string, std::string> NewCryptoDriver::encrypt(SecByteBlock mk, st
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
 
-  printf("encryption key!\n");
-  print_key_as_int(enc_key);
-  printf("iv!");
-  print_key_as_int(iv);
+  // printf("encryption key!\n");
+  // print_key_as_int(enc_key);
+  // printf("iv!");
+  // print_key_as_int(iv);
 
   std::string ct = new_AES_encrypt(enc_key, pt, iv);
 
   // calculate HMAC
   std::string hmac = HMAC_generate(auth_key, ad + ct);
-  printf("auth key!\n");
-  print_key_as_int(auth_key);
-  printf("hmac!\n");
-  printf("%s\n", hmac);
-  printf("yuh\n");
+  // printf("auth key!\n");
+  // print_key_as_int(auth_key);
+  // printf("hmac!\n");
+  // printf("%s\n", hmac);
+  // printf("yuh\n");
   
 
   return {ct, hmac};
 }
-
+/**
+ * @brief Decrypts a ciphertext message using the provided Message Key.
+ * Per Perrin and Marlinspike's algorithm, also takes in associated data that 
+ * could be prepended to the header, but from discussion with our mentor, we decided
+ * that this was not extremely useful to include.
+ * @param mk Message Key
+ * @param ct Ciphertext message
+ * @param ad Associated Data
+ * @return Pair of plaintext and auth key
+ */
 std::pair<std::string, CryptoPP::SecByteBlock> NewCryptoDriver::decrypt(SecByteBlock mk, std::string ct, std::string ad) {
   CryptoPP::SecByteBlock full_key(80); 
 
+  // Uses HKDF to derive a 80 byte key
   HKDF<SHA256> hkdf;
   hkdf.DeriveKey(full_key, full_key.size(), mk, mk.size(), NULL, 0, NULL, 0);
 
+  // Splits the 80 byte key into a 32 byte Encryption Key and 32 byte Authentication Key and a 16 byte IV
   CryptoPP::SecByteBlock enc_key(32);
   CryptoPP::SecByteBlock auth_key(32);
   CryptoPP::SecByteBlock iv(16);
@@ -149,31 +187,16 @@ std::pair<std::string, CryptoPP::SecByteBlock> NewCryptoDriver::decrypt(SecByteB
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
 
-  printf("decryption key!\n");
-  print_key_as_int(enc_key);
-  printf("iv!\n");
-  print_key_as_int(iv);
-  // printf("%d\n")
+  // printf("decryption key!\n");
+  // print_key_as_int(enc_key);
+  // printf("iv!\n");
+  // print_key_as_int(iv);
 
   std::string dec = AES_decrypt(enc_key, iv, ct);
 
-  // bool verified = HMAC_verify(auth_key, ad + ct, "HMAC");
-  // if (verified){
-  //   return dec;
-  // }
 
-  // 
   return {dec, auth_key};
 }
-
-
-// RatchetEncrypt, RatchetDecrypt
-
-
-
-
-
-
 
 /**
  * @brief Generates AES key using HKDF with a salt. This function should
@@ -224,7 +247,7 @@ NewCryptoDriver::new_AES_encrypt(SecByteBlock key, std::string plaintext, SecByt
     CryptoPP::StringSource s(plaintext, true, new StreamTransformationFilter(enc, new StringSink(ciphertext)));
 
     printf("ciphertext length! \n");
-    printf("%d\n", ciphertext.length());
+    // printf("%d\n", ciphertext.length());
     printf("yuh\n");
     return ciphertext;
 
@@ -286,7 +309,6 @@ NewCryptoDriver::HMAC_generate_key(const SecByteBlock &DH_shared_key) {
   std::string hmac_salt_str("salt0001");
   SecByteBlock hmac_salt((const unsigned char *)(hmac_salt_str.data()),
                          hmac_salt_str.size());
-  // TODO: implement me!
 
   SecByteBlock key(SHA256::BLOCKSIZE);
 
@@ -345,33 +367,5 @@ bool NewCryptoDriver::HMAC_verify(SecByteBlock key, std::string ciphertext,
 
   } catch (const CryptoPP::Exception& e) {
     return false;
-  }
-  
-
-
-}
-
-
-std::pair<std::string, SecByteBlock>
-NewCryptoDriver::AES_encrypt(SecByteBlock key, std::string plaintext) {
-  try {
-
-    CBC_Mode<AES>::Encryption enc;
-    SecByteBlock iv(AES::BLOCKSIZE);
-
-    CryptoPP::AutoSeededRandomPool pool;
-    enc.GetNextIV(pool, iv);
-    enc.SetKeyWithIV(key, key.size(), iv);
-
-    std::string ciphertext;
-    CryptoPP::StringSource s(plaintext, true, new StreamTransformationFilter(enc, new StringSink(ciphertext)));
-
-    return {ciphertext, iv};
-
-  } catch (CryptoPP::Exception &e) {
-    std::cerr << e.what() << std::endl;
-    std::cerr << "This function was likely called with an incorrect shared key."
-              << std::endl;
-    throw std::runtime_error("CryptoDriver AES encryption failed.");
   }
 }
