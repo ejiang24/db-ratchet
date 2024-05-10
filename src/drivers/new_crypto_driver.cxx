@@ -83,9 +83,6 @@ SecByteBlock NewCryptoDriver::DH_generate_shared_key(
  */
 std::pair<SecByteBlock, SecByteBlock>
 NewCryptoDriver::KDF_RK(SecByteBlock rk, SecByteBlock dh_out) {
-  // printf("I'm in KDF_RK! rk and then dh_out");
-  // print_key_as_int(rk);
-  // print_key_as_int(dh_out);
   CryptoPP::SecByteBlock key(64); // 64 bytes
 
   // Uses HKDF to derive a 64 byte key
