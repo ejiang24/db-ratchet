@@ -30,24 +30,6 @@ NewClient::NewClient(std::shared_ptr<NetworkDriver> network_driver,
 }
 
 /**
- * Generates a new DH secret and replaces the keys. This function should:
- * 1) Call `DH_generate_shared_key`
- * 2) Use the resulting key in `AES_generate_key` and `HMAC_generate_key`
- * 3) Update private key variables
- */
-void NewClient::prepare_keys(CryptoPP::DH DH_obj,
-                          CryptoPP::SecByteBlock DH_private_value,
-                          CryptoPP::SecByteBlock DH_other_public_value) {
-  CryptoPP::SecByteBlock secret_key = this->crypto_driver->DH_generate_shared_key(DH_obj, DH_private_value, DH_other_public_value);
-
-  CryptoPP::SecByteBlock aes_key = this->crypto_driver->AES_generate_key(secret_key);
-  CryptoPP::SecByteBlock hmac_key = this->crypto_driver->HMAC_generate_key(secret_key);
-
-  this->AES_key = aes_key;
-  this->HMAC_key = hmac_key;
-}
-
-/**
  * Updated Send function!
  * This is a lot simpler than the one completed in Project 1, as most of the
  * low level complexity has been extracted to ratchet_encrypt.
@@ -85,12 +67,6 @@ std::pair<std::string, bool> NewClient::receive(DB_Ratchet_Message msg) {
   std::unique_lock<std::mutex> lck(this->mtx);
 
   std::string dec = ratchet_decrypt(msg.header, msg.ciphertext, "");
-
-  // this->cli_driver->print_warning("about to decrypt!");
-  // this->cli_driver->print_warning("auth key");
-  // print_key_as_int(this->HMAC_key);
-  // this->cli_driver->print_warning("mac!");
-  // this->cli_driver->print_warning(msg.mac);
   bool is_valid = this->crypto_driver->HMAC_verify(this->HMAC_key, concat("", msg.header) + msg.ciphertext, msg.mac);
 
   return {dec, is_valid};
@@ -114,20 +90,6 @@ void NewClient::run(std::string command) {
   // Start sending thread.
   this->SendThread();
 }
-
-// Custom comparison function for CryptoPP::SecBlock<unsigned char>
-bool compareSecBlocks(const CryptoPP::SecByteBlock& lhs,
-                      const CryptoPP::SecByteBlock& rhs) {
-    // Compare the contents of the SecBlocks byte by byte
-    size_t minLength = std::min(lhs.size(), rhs.size());
-    for (size_t i = 0; i < minLength; ++i) {
-        if (lhs[i] < rhs[i]) return true;
-        if (lhs[i] > rhs[i]) return false;
-    }
-    return lhs.size() < rhs.size(); // If all bytes are equal, shorter block is considered smaller
-}
-
-
 
 /**
  * Updated KeyExchange protocol.

@@ -141,21 +141,10 @@ std::pair<std::string, std::string> NewCryptoDriver::encrypt(SecByteBlock mk, st
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
 
-  // printf("encryption key!\n");
-  // print_key_as_int(enc_key);
-  // printf("iv!");
-  // print_key_as_int(iv);
-
   std::string ct = new_AES_encrypt(enc_key, pt, iv);
 
   // calculate HMAC
   std::string hmac = HMAC_generate(auth_key, ad + ct);
-  // printf("auth key!\n");
-  // print_key_as_int(auth_key);
-  // printf("hmac!\n");
-  // printf("%s\n", hmac);
-  // printf("yuh\n");
-  
 
   return {ct, hmac};
 }
@@ -183,11 +172,6 @@ std::pair<std::string, CryptoPP::SecByteBlock> NewCryptoDriver::decrypt(SecByteB
   enc_key.Assign(full_key, 32);
   auth_key.Assign(full_key + 32, 32);
   iv.Assign(full_key + 64, 16);
-
-  // printf("decryption key!\n");
-  // print_key_as_int(enc_key);
-  // printf("iv!\n");
-  // print_key_as_int(iv);
 
   std::string dec = AES_decrypt(enc_key, iv, ct);
 
