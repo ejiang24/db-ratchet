@@ -13,6 +13,8 @@
 #include "../../include-shared/util.hpp"
 #include "colors.hpp"
 
+#include <thread>
+
 /**
  * Constructor. Sets up TCP socket and starts REPL
  * @param command One of "listen" or "connect"
@@ -342,7 +344,16 @@ void NewClient::ReceiveThread() {
  */
 void NewClient::SendThread() {
   std::string plaintext;
+  DB_Ratchet_Message out_of_order;
   while (true) {
+    // If there's an out of order stored, send it.
+    if (out_of_order.ciphertext != "") {
+        std::vector<unsigned char> data;
+        out_of_order.serialize(data);
+        this->network_driver->send(data);
+        this->cli_driver->print_right(plaintext);
+    }
+    
     // Read from STDIN.
     std::getline(std::cin, plaintext);
     if (std::cin.eof()) {
@@ -353,6 +364,16 @@ void NewClient::SendThread() {
 
     // Encrypt and send message.
     if (plaintext != "") {
+      // if the first character is a "d", delay
+      if (plaintext[0] == 'd') {
+        // store the DB_Ratchet_Message for later
+        out_of_order = this->send(plaintext);
+       
+        // populate plaintext with a new message to send
+        this->cli_driver->print_warning("previous message delayed, please send another one:");
+        std::getline(std::cin, plaintext);
+      }
+
       DB_Ratchet_Message msg = this->send(plaintext);
       std::vector<unsigned char> data;
       msg.serialize(data);
@@ -467,9 +488,12 @@ std::string NewClient::try_skipped_message_keys(Header header, std::string ct, s
   CryptoPP::Integer key = byteblock_to_integer(header.DH_public_val + integer_to_byteblock(header.ns));
   // std::pair<SecByteBlock, Integer> key = std::make_pair(header.DH_public_val,header.ns);
   if (this->mskipped.find(key) == this->mskipped.end()){
+    this->cli_driver->print_warning("NOT FOUND :(((");
     return "";
   }
   else{
+    this->cli_driver->print_warning("found a skipped message key!!!");
+    this->cli_driver->print_warning("joseph!!");
     Integer mk = this->mskipped[key];
     // auto found = this->mskipped.find(key);
     this->mskipped.erase(key);
@@ -487,6 +511,7 @@ void NewClient::skip_message_keys(CryptoPP::Integer until){
   if (this->ck_receiving != string_to_byteblock("")){
     // Creating skip message keys and storing them
     while (this->msg_num_receiving < until){
+      this->cli_driver->print_warning("i am now storing this message key for later!!!!!!");
       auto[new_ckr, new_mk] = this->crypto_driver->KDF_CK(this->ck_receiving);
       this->ck_receiving = new_ckr;
       Integer key = byteblock_to_integer(this->DH_last_other_public_value + integer_to_byteblock(this->msg_num_receiving));
